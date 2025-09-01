@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Emergency Mesh Chat</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/peerjs@1.4.7/dist/peerjs.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
+</head>
+<body class="bg-gray-100 h-screen flex flex-col">
+    <!-- App Header -->
+    <header class="bg-red-600 text-white p-3 shadow-md">
+        <div class="container mx-auto flex justify-between items-center">
+            <div class="flex items-center space-x-2">
+                <i class="fas fa-tower-cell text-xl"></i>
+                <h1 class="text-lg md:text-xl font-bold">Emergency Mesh Chat</h1>
+            </div>
+            <div class="flex space-x-3">
+                <button id="connect-btn" class="bg-white text-red-600 px-3 py-1 rounded-full text-xs md:text-sm font-semibold flex items-center">
+                    <i class="fas fa-wifi mr-1"></i> <span id="connection-status-text">Connect</span>
+                </button>
+                <button id="settings-btn" class="text-white">
+                    <i class="fas fa-cog"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Connection Status Bar -->
+    <div id="connection-status-bar" class="bg-yellow-100 text-yellow-800 p-2 text-center text-xs md:text-sm hidden">
+        <i class="fas fa-exclamation-triangle mr-1"></i>
+        <span id="connection-status-message">Offline - Searching for local devices...</span>
+    </div>
+
+    <!-- Main Content -->
+    <main class="flex-1 container mx-auto p-2 md:p-4 flex flex-col md:flex-row">
+        <!-- Sidebar - Device List (Hidden on mobile when not active) -->
+        <aside id="sidebar" class="hidden md:block md:w-64 bg-white rounded-lg shadow-md p-3 mb-3 md:mb-0 md:mr-3">
+            <div class="flex justify-between items-center mb-3">
+                <h2 class="font-bold text-base md:text-lg text-gray-700">Nearby Devices</h2>
+                <button id="refresh-devices" class="text-gray-500 hover:text-gray-700">
+                    <i class="fas fa-sync-alt"></i>
+                </button>
+            </div>
+            <div id="device-list" class="space-y-2 max-h-64 overflow-y-auto">
+                <div class="text-center text-gray-500 py-4">
+                    <i class="fas fa-search fa-lg mb-2"></i>
+                    <p>Searching for devices...</p>
+                </div>
+            </div>
+            
+            <div class="mt-4">
+                <h2 class="font-bold text-base md:text-lg mb-3 text-gray-700">Active Connections</h2>
+                <div id="active-connections" class="space-y-2 max-h-48 overflow-y-auto">
+                    <div class="text-center text-gray-500 py-4">
+                        <i class="fas fa-plug fa-lg mb-2"></i>
+                        <p>No active connections</p>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Chat Area -->
+        <section class="flex-1 flex flex-col bg-white rounded-lg shadow-md overflow-hidden">
+            <!-- Chat Header with mobile menu button -->
+            <div class="border-b p-3 bg-gray-50 flex justify-between items-center">
+                <div>
+                    <h2 class="font-bold text-gray-700 text-sm md:text-base" id="current-channel">Emergency Channel</h2>
+                    <p class="text-xs text-gray-500"><span id="connected-devices-count">0</span> devices connected via <span id="connection-type-display">local network</span></p>
+                </div>
+                <button id="mobile-menu-btn" class="md:hidden text-gray-600">
+                    <i class="fas fa-bars"></i>
+                </button>
+            </div>
+            
+            <!-- Messages -->
+            <div id="messages" class="flex-1 p-3 overflow-y-auto space-y-3">
+                <div class="text-center text-gray-500 py-8">
+                    <i class="fas fa-comments fa-lg mb-2"></i>
+                    <p>No messages yet. Connect to devices to start chatting.</p>
+                </div>
+            </div>
+            
+            <!-- Message Input -->
+            <div class="border-t p-3 bg-gray-50">
+                <div class="flex space-x-2">
+                    <button id="attach-btn" class="bg-gray-200 p-2 rounded-full text-gray-600 hover:bg-gray-300">
+                        <i class="fas fa-paperclip"></i>
+                    </button>
+                    <input type="text" id="message-input" placeholder="Type a message..." 
+                           class="flex-1 border rounded-full px-3 py-2 focus:outline-none focus:ring-2 focus:ring-red-300 text-sm md:text-base">
+                    <button id="send-btn" class="bg-red-600 text-white p-2 rounded-full hover:bg-red-700">
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
+                    <button id="emergency-btn" class="bg-red-800 text-white p-2 rounded-full hover:bg-red-900">
+                        <i class="fas fa-bell"></i>
+                    </button>
+                </div>
+                <div class="mt-2 flex justify-between text-xs text-gray-500">
+                    <span id="network-status">Local network only</span>
+                    <span id="encryption-status">Encrypted</span>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Connection Modal -->
+    <div id="connection-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50 p-2">
+        <div class="bg-white rounded-lg p-4 w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center mb-3">
+                <h2 class="text-lg md:text-xl font-bold text-gray-800">Connect Devices</h2>
+                <button id="close-modal" class="text-gray-500 hover:text-gray-700">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            
+            <div class="space-y-3">
+                <!-- WebRTC Connection -->
+                <div class="border rounded-lg p-3">
+                    <h3 class="font-semibold mb-2 flex items-center">
+                        <i class="fas fa-users text-blue-500 mr-2"></i> Peer-to-Peer (WebRTC)
+                    </h3>
+                    <div class="mb-2">
+                        <label class="block text-xs md:text-sm font-medium text-gray-700 mb-1">Your Peer ID</label>
+                        <div class="flex">
+                            <input type="text" id="peer-id" class="flex-1 border rounded-l-lg px-2 py-1 md:px-3 md:py-2 text-xs md:text-sm" readonly>
+                            <button id="copy-peer-id" class="bg-gray-200 px-2 md:px-3 rounded-r-lg hover:bg-gray-300">
+                                <i class="fas fa-copy"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="mb-2">
+                        <label class="block text-xs md:text-sm font-medium text-gray-700 mb-1">Connect to Peer ID</label>
+                        <input type="text" id="remote-peer-id" class="w-full border rounded-lg px-2 py-1 md:px-3 md:py-2 text-xs md:text-sm" placeholder="Enter peer ID">
+                    </div>
+                    <div class="flex space-x-2">
+                        <button id="connect-peer" class="flex-1 bg-blue-500 text-white py-1 md:py-2 rounded-lg hover:bg-blue-600 text-xs md:text-sm">
+                            Connect
+                        </button>
+                        <button id="show-qr" class="px-2 md:px-3 bg-gray-200 rounded-lg hover:bg-gray-300">
+                            <i class="fas fa-qrcode"></i>
+                        </button>
+                        <button id="scan-qr" class="px-2 md:px-3 bg-gray-200 rounded-lg hover:bg-gray-300">
+                            <i class="fas fa-camera"></i>
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Bluetooth Connection -->
+                <div class="border rounded-lg p-3">
+                    <h3 class="font-semibold mb-2 flex items-center">
+                        <i class="fas fa-bluetooth-b text-blue-700 mr-2"></i> Bluetooth
+                    </h3>
+                    <p class="text-xs md:text-sm text-gray-600 mb-2">Pair with nearby Bluetooth devices</p>
+                    <button id="scan-bluetooth" class="w-full bg-blue-700 text-white py-1 md:py-2 rounded-lg hover:bg-blue-800 text-xs md:text-sm">
+                        Scan Bluetooth Devices
+                    </button>
+                </div>
+                
+                <!-- Local Network Connection -->
+                <div class="border rounded-lg p-3">
+                    <h3 class="font-semibold mb-2 flex items-center">
+                        <i class="fas fa-network-wired text-green-600 mr-2"></i> Local Network
+                    </h3>
+                    <p class="text-xs md:text-sm text-gray-600 mb-2">Connect to devices on same Wi-Fi</p>
+                    <button id="scan-local" class="w-full bg-green-600 text-white py-1 md:py-2 rounded-lg hover:bg-green-700 text-xs md:text-sm">
+                        Scan Local Network
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- QR Code Modal -->
+    <div id="qr-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50 p-2">
+        <div class="bg-white rounded-lg p-4 w-full max-w-sm">
+            <div class="flex justify-between items-center mb-3">
+                <h2 class="text-lg md:text-xl font-bold text-gray-800">Pair with QR Code</h2>
+                <button id="close-qr" class="text-gray-500 hover:text-gray-700">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            
+            <div class="text-center">
+                <div id="qr-code" class="mx-auto p-2 bg-white rounded-lg border mb-3"></div>
+                <p class="text-xs md:text-sm text-gray-600 mb-2">Scan this QR code with another device to connect</p>
+                <p class="text-xs text-gray-500">Or share your Peer ID: <span id="share-peer-id" class="font-mono"></span></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50 p-2">
+        <div class="bg-white rounded-lg p-4 w-full max-w-md">
+            <div class="flex justify-between items-center mb-3">
+                <h2 class="text-lg md:text-xl font-bold text-gray-800">Settings</h2>
+                <button id="close-settings" class="text-gray-500 hover:text-gray-700">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-xs md:text-sm font-medium text-gray-700 mb-1">Device Name</label>
+                    <input type="text" id="device-name" class="w-full border rounded-lg px-2 py-1 md:px-3 md:py-2 text-xs md:text-sm" value="Emergency Device">
+                </div>
+                
+                <div>
+                    <label class="block text-xs md:text-sm font-medium text-gray-700 mb-1">Connection Priority</label>
+                    <select id="connection-priority" class="w-full border rounded-lg px-2 py-1 md:px-3 md:py-2 text-xs md:text-sm">
+                        <option value="webrtc">WebRTC (Recommended)</option>
+                        <option value="bluetooth">Bluetooth</option>
+                        <option value="local">Local Network</option>
+                    </select>
+                </div>
+                
+                <div>
+                    <label class="block text-xs md:text-sm font-medium text-gray-700 mb-1">Message History</label>
+                    <select id="message-history" class="w-full border rounded-lg px-2 py-1 md:px-3 md:py-2 text-xs md:text-sm">
+                        <option value="1">Keep for 1 day</option>
+                        <option value="7">Keep for 7 days</option>
+                        <option value="30">Keep for 30 days</option>
+                        <option value="0">Keep forever</option>
+                    </select>
+                </div>
+                
+                <div class="flex items-center">
+                    <input type="checkbox" id="enable-encryption" class="form-checkbox text-red-600" checked>
+                    <label for="enable-encryption" class="ml-2 text-xs md:text-sm text-gray-700">Enable end-to-end encryption</label>
+                </div>
+                
+                <div class="flex items-center">
+                    <input type="checkbox" id="auto-connect" class="form-checkbox text-red-600" checked>
+                    <label for="auto-connect" class="ml-2 text-xs md:text-sm text-gray-700">Auto-connect to nearby devices</label>
+                </div>
+                
+                <div class="pt-3">
+                    <button id="save-settings" class="w-full bg-red-600 text-white py-1 md:py-2 rounded-lg hover:bg-red-700 text-xs md:text-sm">
+                        Save Settings
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- File Attachment Modal -->
+    <div id="file-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50 p-2">
+        <div class="bg-white rounded-lg p-4 w-full max-w-md">
+            <div class="flex justify-between items-center mb-3">
+                <h2 class="text-lg md:text-xl font-bold text-gray-800">Send File</h2>
+                <button id="close-file-modal" class="text-gray-500 hover:text-gray-700">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            
+            <div class="space-y-3">
+                <div class="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center">
+                    <input type="file" id="file-input" class="hidden">
+                    <label for="file-input" class="cursor-pointer">
+                        <i class="fas fa-cloud-upload-alt text-3xl md:text-4xl text-gray-400 mb-2"></i>
+                        <p class="text-xs md:text-sm text-gray-600">Click to select a file or drag and drop</p>
+                        <p class="text-xs text-gray-500 mt-1">Max file size: 10MB</p>
+                    </label>
+                </div>
+                
+                <div id="file-preview" class="hidden">
+                    <div class="flex items-center justify-between bg-gray-100 p-2 rounded-lg">
+                        <div class="flex items-center truncate">
+                            <i class="fas fa-file text-gray-500 mr-2"></i>
+                            <span id="file-name" class="truncate text-xs md:text-sm">filename.ext</span>
+                        </div>
+                        <button id="remove-file" class="text-red-500">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                </div>
+                
+                <button id="send-file" class="w-full bg-blue-500 text-white py-1 md:py-2 rounded-lg hover:bg-blue-600 disabled:opacity-50 text-xs md:text-sm" disabled>
+                    Send File
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-4 py-2 rounded-lg shadow-lg text-xs md:text-sm hidden z-50"></div>
+
+    <!-- Link to external JavaScript file -->
+    <script src="app.js"></script>
+
+    <style>
+        @keyframes fade-in {
+            from { opacity: 0; transform: translate(-50%, 10px); }
+            to { opacity: 1; transform: translate(-50%, 0); }
+        }
+        
+        @keyframes fade-out {
+            from { opacity: 1; transform: translate(-50%, 0); }
+            to { opacity: 0; transform: translate(-50%, -10px); }
+        }
+        
+        .animate-fade-in {
+            animation: fade-in 0.3s ease-out forwards;
+        }
+        
+        .animate-fade-out {
+            animation: fade-out 0.3s ease-in forwards;
+        }
+        
+        #device-list, #active-connections, #messages {
+            scrollbar-width: thin;
+            scrollbar-color: #cbd5e0 #f7fafc;
+        }
+        
+        #device-list::-webkit-scrollbar, 
+        #active-connections::-webkit-scrollbar,
+        #messages::-webkit-scrollbar {
+            width: 4px;
+        }
+        
+        #device-list::-webkit-scrollbar-track, 
+        #active-connections::-webkit-scrollbar-track,
+        #messages::-webkit-scrollbar-track {
+            background: #f7fafc;
+        }
+        
+        #device-list::-webkit-scrollbar-thumb, 
+        #active-connections::-webkit-scrollbar-thumb,
+        #messages::-webkit-scrollbar-thumb {
+            background-color: #cbd5e0;
+            border-radius: 2px;
+        }
+        
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            #sidebar {
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 80%;
+                height: 100%;
+                z-index: 100;
+                box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+                transform: translateX(-100%);
+                transition: transform 0.3s ease;
+            }
+            
+            #sidebar.show {
+                transform: translateX(0);
+            }
+            
+            #messages {
+                padding-bottom: 80px;
+            }
+        }
+    </style>
+</body>
+</html>
